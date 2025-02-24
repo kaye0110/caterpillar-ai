@@ -22,7 +22,6 @@ var/
 wheels/
 export/
 logs/
-test/
 *.egg-info/
 .installed.cfg
 *.egg
