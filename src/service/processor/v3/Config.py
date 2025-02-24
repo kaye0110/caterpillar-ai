@@ -33,6 +33,9 @@ class Configuration:
         self.n_timestep = 40
         self.n_predict = 10
 
+        self.feature_rates = [1.75,1.5,1.25,1]
+        self.feature_size_min = 7
+
         '''
         批量大小决定了每次迭代中使用的样本数量。较小的批量大小可以更好地利用内存，但可能导致训练时间较长。较大的批量大小可以加速训练，但可能需要更多的内存。
         建议值 32, 64, 128

@@ -127,12 +127,16 @@ class HybridModelProcess(Processor):
         selector = RandomForestRegressor(n_estimators=self.config.n_estimators, max_depth=self.config.max_depth, random_state=self.config.random_state, n_jobs=self.config.n_jobs)
         selector.fit(X[:test_size], y[:test_size])
 
-        # 使用 SelectFromModel
-        model = SelectFromModel(selector, prefit=True, threshold=1.5 * np.mean(selector.feature_importances_))
+        # 如果指标数量太小的话，模型效果较差
+        for rate in self.config.feature_rates:
+            # 使用 SelectFromModel
+            model = SelectFromModel(selector, prefit=True, threshold= rate * np.mean(selector.feature_importances_))
 
-        # 获取选择的特征索引
-        selected_feature_indexes = model.get_support(indices=True)
-        self.selected_features = X.iloc[:, selected_feature_indexes].columns.tolist()
+            # 获取选择的特征索引
+            selected_feature_indexes = model.get_support(indices=True)
+            self.selected_features = X.iloc[:, selected_feature_indexes].columns.tolist()
+            if len(self.selected_features) >= self.config.feature_size_min:
+                break
 
         self.feature_scaler = MinMaxScaler(feature_range=(0, 1))
         scaled_data = self.feature_scaler.fit_transform(self.data[self.selected_features + [self.config.target_names[0]]])
