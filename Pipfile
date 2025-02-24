@@ -1,0 +1,37 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[[source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu126"
+verify_ssl = true
+
+[packages]
+numpy = "*"
+scikit-learn = "*"
+pandas = "*"
+mysql-connector-python = "*"
+redis = "*"
+elasticsearch = "*"
+plotly = "*"
+matplotlib = "*"
+seaborn = "*"
+python-dotenv = "*"
+pyarrow = "*"
+fastparquet = "*"
+jsonpickle = "*"
+keras-tuner = "*"
+backtrader = "*"
+pyxlstm = "*"
+torch = {version = "*", index = "pytorch"}
+torchvision = {version = "*", index = "pytorch"}
+torchaudio = {version = "*", index = "pytorch"}
+tensorflow = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
+python_full_version = "3.12.9"
