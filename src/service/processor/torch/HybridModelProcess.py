@@ -130,7 +130,7 @@ class HybridModelProcess(Processor):
         # 如果指标数量太小的话，模型效果较差
         for rate in self.config.feature_rates:
             # 使用 SelectFromModel
-            model = SelectFromModel(selector, prefit=True, threshold= rate * np.mean(selector.feature_importances_))
+            model = SelectFromModel(selector, prefit=True, threshold=rate * np.mean(selector.feature_importances_))
 
             # 获取选择的特征索引
             selected_feature_indexes = model.get_support(indices=True)
@@ -248,13 +248,72 @@ class HybridModelProcess(Processor):
         predictions = self.target_scaler.inverse_transform(predictions)
         actuals = self.target_scaler.inverse_transform(actuals)
 
+        # Calculate existing metrics
         self.result_mse = mean_squared_error(actuals, predictions)
         self.result_mae = mean_absolute_error(actuals, predictions)
         self.result_r2 = r2_score(actuals, predictions)
 
+        # Calculate additional metrics
+        self.result_rmse = np.sqrt(self.result_mse)
+        self.result_mape = np.mean(np.abs((actuals - predictions) / actuals)) * 100
+        self.result_smape = np.mean(2.0 * np.abs(actuals - predictions) / (np.abs(actuals) + np.abs(predictions))) * 100
+        self.result_explained_variance = 1 - np.var(actuals - predictions) / np.var(actuals)
+
+        # Adjusted R² calculation
+        n = len(actuals)
+        p = predictions.shape[1]  # Number of features
+        self.result_adjusted_r2 = 1 - (1 - self.result_r2) * (n - 1) / (n - p - 1)
+
+        # Calculate composite score
+        self.composite_score = self.evaluate_model_performance(
+            self.result_mse, self.result_mae, self.result_r2, self.result_rmse,
+            self.result_mape, self.result_smape, self.result_explained_variance, self.result_adjusted_r2
+        )
+
+        # Print or log the results
+        self.logger.info(f'MSE: {self.result_mse}')
+        self.logger.info(f'MAE: {self.result_mae}')
+        self.logger.info(f'R²: {self.result_r2}')
+        self.logger.info(f'RMSE: {self.result_rmse}')
+        self.logger.info(f'MAPE: {self.result_mape}')
+        self.logger.info(f'SMAPE: {self.result_smape}')
+        self.logger.info(f'Explained Variance: {self.result_explained_variance}')
+        self.logger.info(f'Adjusted R²: {self.result_adjusted_r2}')
+        self.logger.info(f'Composite Score: {self.composite_score}')
+
         self.visualize_results(actuals, predictions, self.config.n_predict)
 
         return self
+
+    def evaluate_model_performance(self, mse, mae, r2, rmse, mape, smape, explained_variance, adjusted_r2):
+        """
+        计算模型的综合得分，用于选择最优模型。
+        """
+        # 定义每个指标的权重
+        weights = {
+            'mse': 0.15,
+            'mae': 0.15,
+            'r2': 0.2,
+            'rmse': 0.15,
+            'mape': 0.1,
+            'smape': 0.1,
+            'explained_variance': 0.1,
+            'adjusted_r2': 0.05
+        }
+
+        # 计算综合得分
+        composite_score = (
+                weights['mse'] * (1 / (1 + mse)) +  # 取倒数以便于最小化
+                weights['mae'] * (1 / (1 + mae)) +  # 取倒数以便于最小化
+                weights['r2'] * r2 +  # R² 越大越好
+                weights['rmse'] * (1 / (1 + rmse)) +  # 取倒数以便于最小化
+                weights['mape'] * (1 / (1 + mape)) +  # 取倒数以便于最小化
+                weights['smape'] * (1 / (1 + smape)) +  # 取倒数以便于最小化
+                weights['explained_variance'] * explained_variance +  # Explained Variance 越大越好
+                weights['adjusted_r2'] * adjusted_r2  # Adjusted R² 越大越好
+        )
+
+        return composite_score
 
     def visualize_results(self, actuals, predictions, n_predict):
         residuals = actuals - predictions
