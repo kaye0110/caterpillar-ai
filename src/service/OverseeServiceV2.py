@@ -53,7 +53,7 @@ class OverseeService:
         self.train_end_date = None
         self.predict_start_date = None
         self.predict_end_date = None
-        self.poltly_end_date = None
+        self.polt_end_date = None
         self.model_type = 'XLSTM'
 
         self.predict_trade_list = {}
@@ -125,25 +125,46 @@ class OverseeService:
         config.learning_rate = 0.0001
 
         file_name = f"performance_tuning_result_{self.batch_code}_{ts_code}"
-        tuned_param = self.datastore.load_model(file_name=file_name, file_type="json")
-        if tuned_param is not None:
-            config.hidden_size = tuned_param['hidden_size']
-            config.num_layers = tuned_param['num_layers']
-            config.dropout = tuned_param['dropout']
-            config.learning_rate = tuned_param['learning_rate']
-            config.max_depth = tuned_param['max_depth']
-            config.n_estimators = tuned_param['n_estimators']
+        top_params = self.datastore.load_model_data(file_name=file_name)
 
-        processor = None
-        if "XLSTM" == self.model_type:
-            processor = XLSTMProcess(config)
-        elif "hybrid" == self.model_type:
-            processor = HybridModelProcess(config)
+        if top_params is None or len(top_params) <= 0:
+            processor = None
+            if "XLSTM" == self.model_type:
+                processor = XLSTMProcess(config)
+            elif "hybrid" == self.model_type:
+                processor = HybridModelProcess(config)
 
-        if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
-            processor.stock_code = ts_code
+            if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
+                processor.stock_code = ts_code
 
-        processor.prepare(data=filtered_df).build_model().train().test().report()
+            processor.prepare(data=filtered_df).build_model().train().test().report()
+
+        else:
+            # 遍历 top 10 记录
+            for idx, record in top_params.iterrows():
+                self.logger.info(f"Record {idx + 1}, composite_score: {record['composite_score']}  mse: {record['mse']}  mae: {record['mae']}  rmse: {record['rmse']}  mape: {record['mape']}  smape: {record['smape']}  explained_variance: {record['explained_variance']}  adj_r2: {record['adj_r2']}   ")
+                self.logger.info(f"Record {idx + 1}, batch_size: {record['batch_size']} hidden_size: {record['hidden_size']} num_layers: {record['num_layers']} dropout: {record['dropout']} learning_rate: {record['learning_rate']} max_depth: {record['max_depth']} n_estimators: {record['n_estimators']}  ")
+
+                config.batch_size = int(record['batch_size'])
+                config.hidden_size = int(record['hidden_size'])
+                config.num_layers = int(record['num_layers'])
+                config.dropout = record['dropout']
+                config.learning_rate = record['learning_rate']
+                config.max_depth = int(record['max_depth'])
+                config.n_estimators = int(record['n_estimators'])
+                config.model_idx = idx + 1
+                config.model_composite_score = record['composite_score']
+
+                processor = None
+                if "XLSTM" == self.model_type:
+                    processor = XLSTMProcess(config)
+                elif "hybrid" == self.model_type:
+                    processor = HybridModelProcess(config)
+
+                if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
+                    processor.stock_code = ts_code
+
+                processor.prepare(data=filtered_df).build_model().train().test().report()
 
     @time_counter(logger_name=__name__)
     def _performance_tuning(self, df: pd.DataFrame, ts_code: str = 'all') -> {}:
@@ -162,17 +183,17 @@ class OverseeService:
         mask = (df_single['trade_date_copy'] >= self.train_start_date) & (df_single['trade_date_copy'] <= self.train_end_date)
         filtered_df = df_single.loc[mask]
 
-        config = Configuration().set_model_type("XLSTM").set_batch_code(self.batch_code)
+        config = Configuration().set_model_type(self.model_type).set_batch_code(self.batch_code)
 
         # 定义参数网格
         param_grid = {
             'batch_size': [32, 64, 128],
             'hidden_size': [64, 128, 256],
             'num_layers': [1, 2, 3],
-            'dropout': [0.1, 0.2, 0.3],
-            'learning_rate': [0.001, 0.0005, 0.0001],
-            'max_depth':   [50, 100, 200],
-            'n_estimators': [50, 100, 200],
+            'dropout': [0.05, 0.1, 0.2],
+            'learning_rate': [0.0005, 0.0001, 0.00005],
+            'max_depth': [100],  # [50, 100, 150],
+            'n_estimators': [100],  # [50, 100, 200],
         }
 
         # 生成所有参数组合
@@ -187,9 +208,7 @@ class OverseeService:
 
         ))
 
-        best_mse = float('inf')
-        best_params = None
-
+        # ${ts_code}_${idx} = {model.params & score}
         metrics = {}
         processor = None
         # 循环遍历所有参数组合
@@ -223,49 +242,53 @@ class OverseeService:
                 mse = processor.result_mse
                 mae = processor.result_mae
                 r2 = processor.result_r2
+                rmse = processor.result_rmse
+                mape = processor.result_mape
+                smape = processor.result_smape
+                explained_variance = processor.result_explained_variance
+                adj_r2 = processor.result_adjusted_r2
+                composite_score = processor.composite_score
 
-                metrics[f'result_{idx}'] = {
+                # 计算加权得分
+                metrics[f'{ts_code}_{idx}'] = {
                     'batch_size': config.batch_size,
                     'hidden_size': config.hidden_size,
                     'num_layers': config.num_layers,
                     'dropout': config.dropout,
                     'learning_rate': config.learning_rate,
+                    'max_depth': config.max_depth,
+                    'n_estimators': config.n_estimators,
                     'mse': mse,
                     'mae': mae,
-                    'r2': r2,
-                    'score_1': np.nan,
-                    'score_2': np.nan
+                    'rmse': rmse,
+                    'mape': mape,
+                    'smape': smape,
+                    'explained_variance': explained_variance,
+                    'adj_r2': adj_r2,
+                    'composite_score': composite_score
                 }
-
-                # 更新最佳参数
-                if mse < best_mse:
-                    best_mse = mse
-                    best_params = params
-
-                self.logger.info(f"Stock:{ts_code} Model:{idx}/{len(param_combinations)} finished with mse: {mse}, mae: {mae}, r2: {r2}")
+                self.logger.info(f"Stock:{ts_code} Model:{idx}/{len(param_combinations)} finished with composite_score:{composite_score}, mse:{mse}, mae:{mae}, r2:{r2} "
+                                 f"rmse:{rmse} mape:{mape} smape:{smape} explained_variance:{explained_variance} adj_r2:{adj_r2}")
             except Exception as e:
                 self.logger.error(f"An error occurred: {e} {config.batch_size} {config.hidden_size} {config.num_layers} {config.dropout} {config.learning_rate} ")
                 traceback.print_exc()
 
-        self.logger.info(f'Stock:{ts_code} Best MSE: {best_mse}')
-        self.logger.info(
-            f'Stock:{ts_code} Best Parameters: batch_size={best_params[0]}, hidden_size={best_params[1]}, num_layers={best_params[2]}, dropout={best_params[3]}, learning_rate={best_params[4]}')
+        # 提取所有记录并按 composite_score 降序排序
+        sorted_records = sorted(
+            metrics.values(),
+            key=lambda x: x['composite_score'],
+            reverse=True
+        )
 
-        weights = {
-            "mse": 0.4,
-            "mae": 0.4,
-            "r2": 0.2
-        }
-        metrics_df = self.calculate_score(weights, metrics)
-        best_model_name = metrics_df["score_1"].idxmax()
-        self.logger.info(f"Stock:{ts_code} Best model (Weighted Score): {best_model_name}")
-        param = metrics[best_model_name]
-        self.logger.info(f"Stock:{ts_code} Best model parameters: [{param}]")
+        # 获取前10条记录
+        top_records = sorted_records[:config.model_top_size]
+        top_dataframe = pd.DataFrame(top_records)
+        self.logger.info(f"Stock:{ts_code} Top 10 Records: {top_records}")
 
         file_name = f"performance_tuning_result_{processor.store.batch_code}_{ts_code}"
-        processor.store.save_model_data(data=param, file_name=file_name, file_type="json")
+        processor.store.save_model_data(data=top_dataframe, file_name=file_name)
 
-        return param
+        return top_dataframe
 
     def predict(self, df: pd.DataFrame, ts_code: str) -> str:
         if ts_code is None or ts_code == "" or ts_code not in df['ts_code'].values:
@@ -279,10 +302,19 @@ class OverseeService:
         mask = (df_single['trade_date_copy'] >= self.predict_start_date) & (df_single['trade_date_copy'] <= self.predict_end_date)
         filtered_df = df_single.loc[mask]
 
-        processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code)
-        df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
+        file_name = f"performance_tuning_result_{self.batch_code}_{ts_code}"
+        top_params = self.datastore.load_model_data(file_name=file_name)
 
-        return self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.poltly_end_date)
+        if top_params is None or len(top_params) <= 0:
+            processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx="0")
+            df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
+            return self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.polt_end_date)
+
+        else:
+            for idx, record in top_params.iterrows():
+                processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx=str(idx + 1))
+                df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
+                self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.polt_end_date)
 
     def predict_with_export(self, df: pd.DataFrame, processor: Processor, ts_code: str, start_date: str, end_date: str, plotly_end_date: str) -> str:
 
@@ -324,13 +356,6 @@ class OverseeService:
                 tmp = np.append(tmp, np.full(len(last_close_array) - len(tmp), np.nan))
             predict_data_line.append(tmp)
 
-        # for i in range(predict_data_array.shape[1]):  # 遍历每个预测时间步长
-        #     # 将预测结果与真实价格对齐
-        #     tmp = np.append(np.full(processor.config.n_timestep + i, np.nan), predict_data_array[:, i])
-        #     if len(tmp) < len(last_close_array):
-        #         tmp = np.append(tmp, np.full(len(last_close_array) - len(tmp), np.nan))
-        #     predict_data_line.append(tmp)
-
         # 扩展 x 轴到 plotly_end_date
         plotly_end_date = pd.to_datetime(plotly_end_date, format='%Y%m%d')
         if not pd.isna(last_trade_date_array[-1]) and plotly_end_date > last_trade_date_array[-1]:
@@ -371,7 +396,7 @@ class OverseeService:
 
         # 保存为 HTML 文件
         fig_path = os.path.join(processor.store.get_predict_result_path(),
-                                processor.store.get_plotly_name(f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{ts_code}_{start_date}_{end_date}.html"))
+                                processor.store.get_plotly_name(processor.config.batch_code, ts_code, f"{processor.config.model_idx}_{start_date}_{end_date}"))
         fig.write_html(fig_path)
 
         # 获取最后一行的预测价格
@@ -401,7 +426,7 @@ class OverseeService:
         })
 
         # 保存到本地文件
-        file_name = f"predict_last_day_{ts_code}_{start_date}_{end_date}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        file_name = f"predict_data_{processor.config.batch_code}_{ts_code}_{processor.config.model_idx}_{start_date}_{end_date}"
         self.datastore.save_predict_result(predict_price_df, file_name)
 
         for day, pct_chg in price_changes.items():
@@ -452,56 +477,6 @@ class OverseeService:
             segments.append((start_idx, end_idx, length, change_rate))
 
         return segments
-
-    @staticmethod
-    # 计算归一化后的综合得分
-    def calculate_score(weights, results):
-        # 提取指标数据
-        metrics = pd.DataFrame(results).T  # 转换为DataFrame
-        # 归一化（MSE和MAE越小越好，R²越大越好）
-        scaler = MinMaxScaler()
-        # 对MSE和MAE进行正向化（值越小越好 -> 转换后值越大越好）
-        metrics[["mse", "mae"]] = 1 - scaler.fit_transform(metrics[["mse", "mae"]])
-        # 对R²直接归一化（值越大越好）
-        metrics["r2"] = scaler.fit_transform(metrics[["r2"]])
-        # 计算加权总分
-        metrics["score_1"] = (
-                weights["mse"] * metrics["mse"] +
-                weights["mae"] * metrics["mae"] +
-                weights["r2"] * metrics["r2"]
-        )
-        return metrics
-
-    @staticmethod
-    # 计算归一化后的综合得分
-    def calculate_score2(weights, results):
-        # 提取指标数据
-        metrics = pd.DataFrame(results).T  # 转换为DataFrame
-        # 归一化（MSE和MAE越小越好，R²越大越好）
-        scaler = MinMaxScaler()
-        # 对MSE和MAE进行正向化（值越小越好 -> 转换后值越大越好）
-        metrics[["mse", "mae"]] = 1 - scaler.fit_transform(metrics[["mse", "mae"]])
-        # 对R²直接归一化（值越大越好）
-        metrics["r2"] = scaler.fit_transform(metrics[["r2"]])
-        # 计算加权总分
-        metrics["score_1"] = (
-                weights["mse"] * metrics["mse"] +
-                weights["mae"] * metrics["mae"] +
-                weights["r2"] * metrics["r2"]
-        )
-        return metrics
-
-    @staticmethod
-    def calculate_rank_score(results):
-        metrics = pd.DataFrame(results).T
-        # 对MSE和MAE升序排名（值越小越好）
-        metrics["MSE_rank"] = metrics["mse"].rank(ascending=True)
-        metrics["MAE_rank"] = metrics["mae"].rank(ascending=True)
-        # 对R²降序排名（值越大越好）
-        metrics["R²_rank"] = metrics["r2"].rank(ascending=False)
-        # 计算总排名
-        metrics["Total_rank"] = metrics[["MSE_rank", "MAE_rank", "R²_rank"]].sum(axis=1)
-        return metrics
 
     @time_counter(logger_name=__name__)
     def load_data(self, stock_codes: [str], start_date: str, end_date: str) -> pd.DataFrame:

@@ -30,7 +30,7 @@ class OverseeServiceTest(unittest.TestCase):
         oversee.train_end_date = self.train_end_date
         oversee.predict_start_date = self.predict_start_date
         oversee.predict_end_date = self.predict_end_date
-        oversee.poltly_end_date = self.poltly_end_date
+        oversee.polt_end_date = self.poltly_end_date
 
         oversee.load_data(stock_codes=self.stock_code_array, start_date=self.start_date, end_date=self.end_date)
 
@@ -43,6 +43,6 @@ class OverseeServiceTest(unittest.TestCase):
         oversee.train_end_date = self.train_end_date
         oversee.predict_start_date = self.predict_start_date
         oversee.predict_end_date = self.predict_end_date
-        oversee.poltly_end_date = self.poltly_end_date
+        oversee.polt_end_date = self.poltly_end_date
 
         oversee.performance_tuning_single()

@@ -8,7 +8,8 @@ from elasticsearch import Elasticsearch
 
 # Load environment variables from .env file
 load_dotenv()
-
+import sys
+sys.stdout.reconfigure(encoding='utf-8')  # 如果你的Python版本支持的话
 
 class AppConfig:
     _instance = None

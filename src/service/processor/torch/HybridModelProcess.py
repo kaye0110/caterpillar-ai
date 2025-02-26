@@ -16,6 +16,11 @@ from torch.utils.data import DataLoader, Dataset
 
 from src.service.processor.v3.Processor import Processor
 
+import warnings
+
+# 忽略所有 UserWarning 警告
+warnings.filterwarnings('ignore', category=UserWarning)
+
 
 class StockDataset(Dataset):
     def __init__(self, data, time_step, predict_days):
@@ -56,7 +61,8 @@ class HybridModel(nn.Module):
         self.xlstm = XLSTM(input_size, hidden_size, num_layers, output_size, dropout)
         self.gru = nn.GRU(hidden_size * 2, hidden_size, num_layers, dropout=dropout, batch_first=True)
         self.indrnn = nn.RNN(hidden_size, hidden_size, num_layers, nonlinearity='relu', batch_first=True)
-        self.transformer = nn.Transformer(hidden_size, nhead=4, num_encoder_layers=2, num_decoder_layers=2, dropout=dropout)
+        self.transformer = nn.Transformer(hidden_size, nhead=4, num_encoder_layers=2, num_decoder_layers=2,
+                                          dropout=dropout)
         self.fc = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout)
 
@@ -124,7 +130,8 @@ class HybridModelProcess(Processor):
         y = self.targets
 
         # 拟合 selector
-        selector = RandomForestRegressor(n_estimators=self.config.n_estimators, max_depth=self.config.max_depth, random_state=self.config.random_state, n_jobs=self.config.n_jobs)
+        selector = RandomForestRegressor(n_estimators=self.config.n_estimators, max_depth=self.config.max_depth,
+                                         random_state=self.config.random_state, n_jobs=self.config.n_jobs)
         selector.fit(X[:test_size], y[:test_size])
 
         # 如果指标数量太小的话，模型效果较差
@@ -139,13 +146,15 @@ class HybridModelProcess(Processor):
                 break
 
         self.feature_scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = self.feature_scaler.fit_transform(self.data[self.selected_features + [self.config.target_names[0]]])
+        scaled_data = self.feature_scaler.fit_transform(
+            self.data[self.selected_features + [self.config.target_names[0]]])
 
         self.train_loader = self._create_dataset(scaled_data[:test_size], self.config.n_timestep, self.config.n_predict)
         self.test_loader = self._create_dataset(scaled_data[test_size:], self.config.n_timestep, self.config.n_predict)
 
         self.target_scaler = MinMaxScaler(feature_range=(0, 1))
-        self.target_scaler.min_, self.target_scaler.scale_ = self.feature_scaler.min_[-1], self.feature_scaler.scale_[-1]
+        self.target_scaler.min_, self.target_scaler.scale_ = self.feature_scaler.min_[-1], self.feature_scaler.scale_[
+            -1]
 
         # # 数据预处理
         # self.feature_scaler = MinMaxScaler(feature_range=(0, 1))
@@ -158,10 +167,15 @@ class HybridModelProcess(Processor):
         # self.target_scaler.min_, self.target_scaler.scale_ = self.feature_scaler.min_[-1], self.feature_scaler.scale_[-1]
         #
 
-        self.store.save_model(data=self.config.serialize(), file_name=self.store.get_config_name(self.config.batch_code, self.stock_code), file_type="json")
-        self.store.save_model(data=self.feature_scaler, file_name=self.store.get_feature_scaler_name(self.config.batch_code, self.stock_code))
-        self.store.save_model(data=self.target_scaler, file_name=self.store.get_target_scaler_name(self.config.batch_code, self.stock_code))
-        self.store.save_model_feature(data=self.selected_features, file_name=self.store.get_selected_features_name(self.config.batch_code, self.stock_code))
+        self.store.save_model(data=self.config.serialize(),
+                              file_name=self.store.get_config_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)),
+                              file_type="json")
+        self.store.save_model(data=self.feature_scaler,
+                              file_name=self.store.get_feature_scaler_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
+        self.store.save_model(data=self.target_scaler,
+                              file_name=self.store.get_target_scaler_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
+        self.store.save_model_feature(data=self.selected_features,
+                                      file_name=self.store.get_selected_features_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
 
         return self
 
@@ -173,7 +187,8 @@ class HybridModelProcess(Processor):
         output_size = self.config.n_predict
         dropout = self.config.dropout
 
-        self.model = OptimizedHybridModel(input_size, hidden_size, num_layers, output_size, dropout).to(self.config.device)
+        self.model = OptimizedHybridModel(input_size, hidden_size, num_layers, output_size, dropout).to(
+            self.config.device)
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
 
@@ -207,13 +222,14 @@ class HybridModelProcess(Processor):
             # self.logger.info(f'Epoch {epoch + 1}/{self.config.epochs}, Loss: {avg_epoch_loss}, Learning Rate: {current_lr}')
             # print(f'Epoch {epoch + 1}/{self.config.epochs}, Loss: {epoch_loss / len(self.train_loader)}')
 
-        self.store.save_model(data=self.model, file_name=self.store.get_model_name(self.config.batch_code, self.stock_code))
+        self.store.save_model(data=self.model, file_name=self.store.get_model_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
 
         return self
 
     def predict(self, future_data):
         self.model.eval()
-        future_scaled_data = self.feature_scaler.transform(future_data[self.selected_features + [self.config.target_names[0]]])
+        future_scaled_data = self.feature_scaler.transform(
+            future_data[self.selected_features + [self.config.target_names[0]]])
 
         future_dataset = StockDataset(future_scaled_data, self.config.n_timestep, self.config.n_predict)
         future_loader = DataLoader(future_dataset, batch_size=self.config.batch_size, shuffle=False)
@@ -270,17 +286,6 @@ class HybridModelProcess(Processor):
             self.result_mape, self.result_smape, self.result_explained_variance, self.result_adjusted_r2
         )
 
-        # Print or log the results
-        self.logger.info(f'MSE: {self.result_mse}')
-        self.logger.info(f'MAE: {self.result_mae}')
-        self.logger.info(f'R²: {self.result_r2}')
-        self.logger.info(f'RMSE: {self.result_rmse}')
-        self.logger.info(f'MAPE: {self.result_mape}')
-        self.logger.info(f'SMAPE: {self.result_smape}')
-        self.logger.info(f'Explained Variance: {self.result_explained_variance}')
-        self.logger.info(f'Adjusted R²: {self.result_adjusted_r2}')
-        self.logger.info(f'Composite Score: {self.composite_score}')
-
         self.visualize_results(actuals, predictions, self.config.n_predict)
 
         return self
@@ -320,7 +325,8 @@ class HybridModelProcess(Processor):
 
         fig = make_subplots(
             rows=3, cols=1,
-            subplot_titles=(f"Residuals for {n_predict} Days", "Prediction Error Distribution", "Time Series Prediction"),
+            subplot_titles=(
+                f"Residuals for {n_predict} Days", "Prediction Error Distribution", "Time Series Prediction"),
             vertical_spacing=0.1
         )
 
@@ -361,7 +367,8 @@ class HybridModelProcess(Processor):
             hovermode='x unified'
         )
 
-        fig_path = os.path.join(self.store.get_predict_result_path(), self.store.get_plotly_name(f"hybrid_model_test_plotly", self.stock_code))
+        fig_path = os.path.join(self.store.get_predict_result_path(),
+                                self.store.get_plotly_name(self.config.batch_code, self.stock_code, self.config.model_idx))
         fig.write_html(fig_path)
 
     def report(self) -> "HybridModelProcess":

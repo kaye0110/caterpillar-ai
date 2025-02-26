@@ -52,6 +52,9 @@ class DataStore:
     def load_model(self, file_name: str, file_type: str = "pkl") -> Any:
         return self._load_data(file_name, "model", file_type)
 
+    def load_model_data(self, file_name: str, file_type: str = "parquet") -> Any:
+        return self._load_data(file_name, "model_data", file_type)
+
     def load_original_data(self, file_name: str, file_type: str = "parquet") -> pd.DataFrame:
         return self._load_data(file_name, "original", file_type)
 
@@ -92,7 +95,8 @@ class DataStore:
             else:
                 raise ValueError("Invalid file type")
         except Exception as e:
-            self.logger.debug(f"Error loading data: file_name:{file_name} file_type:{file_type} file_kind:{file_kind} file_path:{file_path} {e}")
+            self.logger.debug(
+                f"Error loading data: file_name:{file_name} file_type:{file_type} file_kind:{file_kind} file_path:{file_path} {e}")
             return None
 
     def _save_data(self, data, file_name: str, file_kind: str, file_type: str = "parquet") -> "DataStore":
@@ -171,28 +175,28 @@ class DataStore:
         df.to_parquet(file_path, index=False)
 
     @staticmethod
-    def get_plotly_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_plotly.html'
+    def get_plotly_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'plot_{prefix}_{stock_code}_{suffix}.html'
 
     @staticmethod
-    def get_config_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_config'
+    def get_config_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'config_{prefix}_{stock_code}_{suffix}'
 
     @staticmethod
-    def get_model_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_model'
+    def get_model_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'model_{prefix}_{stock_code}_{suffix}'
 
     @staticmethod
-    def get_feature_scaler_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_feature_scaler'
+    def get_feature_scaler_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'feature_scaler_{prefix}_{stock_code}_{suffix}'
 
     @staticmethod
-    def get_target_scaler_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_target_scaler'
+    def get_target_scaler_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'target_scaler_{prefix}_{stock_code}_{suffix}'
 
     @staticmethod
-    def get_selected_features_name(prefix: str, stock_code: str = "all"):
-        return f'{prefix}_{stock_code}_selected_features'
+    def get_selected_features_name(prefix: str, stock_code: str = "all", suffix: str = "0"):
+        return f'selected_features_{prefix}_{stock_code}_{suffix}'
 
     def get_original_data_path(self, file_name, file_type: str = "parquet") -> str | None:
         file_path = self.generate_original_data_path(file_name, file_type=file_type)
