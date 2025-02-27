@@ -9,7 +9,9 @@ from elasticsearch import Elasticsearch
 # Load environment variables from .env file
 load_dotenv()
 import sys
+
 sys.stdout.reconfigure(encoding='utf-8')  # 如果你的Python版本支持的话
+
 
 class AppConfig:
     _instance = None
@@ -21,6 +23,8 @@ class AppConfig:
         return cls._instance
 
     def _initialize(self):
+        self._init_logger()
+
         # MySQL configuration
         self.mysql_config = {
             'host': os.getenv('MYSQL_HOST'),
@@ -29,33 +33,43 @@ class AppConfig:
             'password': os.getenv('MYSQL_PASSWORD'),
             'database': os.getenv('MYSQL_DATABASE')
         }
-        self.mysql_pool = mysql.connector.pooling.MySQLConnectionPool(
-            pool_name="mysql_pool",
-            pool_size=5,
-            **self.mysql_config
-        )
+        try:
+            self.mysql_pool = mysql.connector.pooling.MySQLConnectionPool(
+                pool_name="mysql_pool",
+                pool_size=5,
+                **self.mysql_config
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to connect to MySQL: {e}")
 
-        # Redis configuration
-        self.redis_config = {
-            'host': os.getenv('REDIS_HOST'),
-            'port': int(os.getenv('REDIS_PORT')),
-            'db': int(os.getenv('REDIS_DB'))
-        }
-        self.redis_pool = redis.ConnectionPool(**self.redis_config)
+        try:
+            # Redis configuration
+            self.redis_config = {
+                'host': os.getenv('REDIS_HOST'),
+                'port': int(os.getenv('REDIS_PORT')),
+                'db': int(os.getenv('REDIS_DB'))
+            }
+            self.redis_pool = redis.ConnectionPool(**self.redis_config)
+        except Exception as e:
+            self.logger.error(f"Failed to connect to Redis: {e}")
 
-        # Elasticsearch configuration
-        self.es_config = {
-            'hosts': [f"http://{os.getenv('ELASTICSEARCH_HOST')}:{os.getenv('ELASTICSEARCH_PORT')}"],
-            'basic_auth': (os.getenv('ELASTICSEARCH_USER'), os.getenv('ELASTICSEARCH_PASSWORD'))
-        }
-        self.es_client = Elasticsearch(**self.es_config)
+        try:
+            # Elasticsearch configuration
+            self.es_config = {
+                'hosts': [f"http://{os.getenv('ELASTICSEARCH_HOST')}:{os.getenv('ELASTICSEARCH_PORT')}"],
+                'basic_auth': (os.getenv('ELASTICSEARCH_USER'), os.getenv('ELASTICSEARCH_PASSWORD'))
+            }
+            self.es_client = Elasticsearch(**self.es_config)
 
-        self.caterpillar_web_config = {
-            'endpoint': os.getenv("CATERPILLAR_ENDPOINT"),
-            'connect_timeout': 10,  # 连接超时 10 秒
-            'read_timeout': 5 * 3600  # 读取超时 5 小时
-        }
+            self.caterpillar_web_config = {
+                'endpoint': os.getenv("CATERPILLAR_ENDPOINT"),
+                'connect_timeout': 10,  # 连接超时 10 秒
+                'read_timeout': 5 * 3600  # 读取超时 5 小时
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to connect to Elasticsearch: {e}")
 
+    def _init_logger(self):
         # 创建一个日志格式器
         formatter = logging.Formatter('%(asctime)s - %(name)s:%(filename)s:%(lineno)d - %(levelname)s - %(message)s')
         # 创建一个控制台处理器
