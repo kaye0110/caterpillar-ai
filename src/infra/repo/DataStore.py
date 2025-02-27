@@ -133,6 +133,29 @@ class DataStore:
 
         return self
 
+    def _remove_file(self, file_name: str, file_kind: str) -> "DataStore":
+        if file_kind == "model":
+            file_path = os.path.join(self.model_path, file_name)
+        elif file_kind == "original":
+            file_path = os.path.join(self.original_data_path, file_name)
+        elif file_kind == "cleaned":
+            file_path = os.path.join(self.cleaned_data_path, file_name)
+        elif file_kind == "model_data":
+            file_path = os.path.join(self.model_data_path, file_name)
+        elif file_kind == "predict_result":
+            file_path = os.path.join(self.predict_result_path, file_name)
+        elif file_kind == "model_feature":
+            file_path = os.path.join(self.model_path, file_name)
+        else:
+            raise ValueError("Invalid file kind")
+
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            self.logger.error(f"Error occurred while removing file: {file_name} {file_kind}", e)
+
+        return self
+
     def _generate_export_directory(self) -> "DataStore":
         """
         初始化数据导出目录
@@ -226,3 +249,29 @@ class DataStore:
             return os.path.join(self.model_path, f"{file_name}.{file_type}")
         else:
             raise ValueError("Invalid file kind")
+
+    def remove_model_files(self, prefix: str, ts_code: str, suffix_list: [str]):
+
+        if prefix is None or ts_code is None or suffix_list is None or len(suffix_list) == 0:
+            return
+
+        for model_idx in suffix_list:
+            plot_name = self.get_plotly_name(prefix, ts_code, model_idx)
+            self._remove_file(plot_name, "predict_result")
+
+            model_name = self.get_model_name(prefix, ts_code, model_idx) + ".pkl"
+            self._remove_file(model_name, "model")
+
+            config_name = self.get_config_name(prefix, ts_code, model_idx) + ".json"
+            self._remove_file(config_name, "model")
+
+            target_scaler_name = self.get_target_scaler_name(prefix, ts_code, model_idx) + ".pkl"
+            self._remove_file(target_scaler_name, "model")
+
+            feature_scaler_name = self.get_feature_scaler_name(prefix, ts_code, model_idx) + ".pkl"
+            self._remove_file(feature_scaler_name, "model")
+
+            selected_feature_name = self.get_selected_features_name(prefix, ts_code, model_idx) + ".json"
+            self._remove_file(selected_feature_name, "model")
+
+        pass

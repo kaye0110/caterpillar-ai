@@ -26,9 +26,9 @@ class ProcessorBuilder:
         else:
             raise Exception("Not implemented")
 
-        processor.model = datastore.load_model(datastore.get_model_name(batch_code, stock_code, config.model_idx), file_type="pkl")
-        processor.feature_scaler = datastore.load_model(datastore.get_feature_scaler_name(batch_code, stock_code, config.model_idx), file_type="pkl")
-        processor.target_scaler = datastore.load_model(datastore.get_target_scaler_name(batch_code, stock_code, config.model_idx), file_type="pkl")
-        processor.selected_features = datastore.load_model(datastore.get_selected_features_name(batch_code, stock_code, config.model_idx), file_type="json")
+        processor.model = datastore.load_model(datastore.get_model_name(batch_code, stock_code, str(int(config.model_idx))), file_type="pkl")
+        processor.feature_scaler = datastore.load_model(datastore.get_feature_scaler_name(batch_code, stock_code, str(int(config.model_idx))), file_type="pkl")
+        processor.target_scaler = datastore.load_model(datastore.get_target_scaler_name(batch_code, stock_code, str(int(config.model_idx))), file_type="pkl")
+        processor.selected_features = datastore.load_model(datastore.get_selected_features_name(batch_code, stock_code, str(int(config.model_idx))), file_type="json")
 
         return processor

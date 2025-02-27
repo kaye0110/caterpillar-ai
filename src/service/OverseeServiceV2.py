@@ -9,8 +9,6 @@ import traceback
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import torch
-from sklearn.preprocessing import MinMaxScaler
 
 from src.config.AppConfig import AppConfig
 from src.infra.repo.DataStore import DataStore
@@ -125,7 +123,6 @@ class OverseeService:
         config.learning_rate = 0.0001
         config.model_idx = 9999
 
-
         processor = None
         if "XLSTM" == self.model_type:
             processor = XLSTMProcess(config)
@@ -136,8 +133,6 @@ class OverseeService:
             processor.stock_code = ts_code
 
         processor.prepare(data=filtered_df).build_model().train().test().report()
-
-
 
     @time_counter(logger_name=__name__)
     def _performance_tuning(self, df: pd.DataFrame, ts_code: str = 'all') -> {}:
@@ -263,6 +258,12 @@ class OverseeService:
         file_name = f"performance_tuning_result_{processor.store.batch_code}_{ts_code}"
         processor.store.save_model_data(data=top_dataframe, file_name=file_name)
 
+        # 删除掉不需要的模型数据
+        sorted_records_df = pd.DataFrame(sorted_records)
+        remaining_df = sorted_records_df[~sorted_records_df['model_idx'].isin(top_dataframe['model_idx'])]
+        model_idx_list = remaining_df['model_idx'].tolist()
+        processor.store.remove_model_files(self.batch_code, ts_code, model_idx_list)
+
         return top_dataframe
 
     def predict(self, df: pd.DataFrame, ts_code: str) -> str:
@@ -287,10 +288,12 @@ class OverseeService:
 
         else:
             for idx, record in top_params.iterrows():
-                self.logger.info(f"Record {record['model_idx']}, composite_score: {record['composite_score']}  mse: {record['mse']}  mae: {record['mae']}  rmse: {record['rmse']}  mape: {record['mape']}  smape: {record['smape']}  explained_variance: {record['explained_variance']}  adj_r2: {record['adj_r2']}   ")
-                self.logger.info(f"Record {record['model_idx']}, batch_size: {record['batch_size']} hidden_size: {record['hidden_size']} num_layers: {record['num_layers']} dropout: {record['dropout']} learning_rate: {record['learning_rate']} max_depth: {record['max_depth']} n_estimators: {record['n_estimators']}  ")
+                self.logger.info(
+                    f"Record {record['model_idx']}, composite_score: {record['composite_score']}  mse: {record['mse']}  mae: {record['mae']}  rmse: {record['rmse']}  mape: {record['mape']}  smape: {record['smape']}  explained_variance: {record['explained_variance']}  adj_r2: {record['adj_r2']}   ")
+                self.logger.info(
+                    f"Record {record['model_idx']}, batch_size: {record['batch_size']} hidden_size: {record['hidden_size']} num_layers: {record['num_layers']} dropout: {record['dropout']} learning_rate: {record['learning_rate']} max_depth: {record['max_depth']} n_estimators: {record['n_estimators']}  ")
 
-                processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx=str(record['model_idx']))
+                processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx=str(int(record['model_idx'])))
                 df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
                 self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.polt_end_date)
 

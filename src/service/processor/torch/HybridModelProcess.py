@@ -1,5 +1,6 @@
 import os
 import random
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -15,8 +16,6 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, Dataset
 
 from src.service.processor.v3.Processor import Processor
-
-import warnings
 
 # 忽略所有 UserWarning 警告
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -170,12 +169,15 @@ class HybridModelProcess(Processor):
         self.store.save_model(data=self.config.serialize(),
                               file_name=self.store.get_config_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)),
                               file_type="json")
+
         self.store.save_model(data=self.feature_scaler,
                               file_name=self.store.get_feature_scaler_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
+
         self.store.save_model(data=self.target_scaler,
                               file_name=self.store.get_target_scaler_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
-        self.store.save_model_feature(data=self.selected_features,
-                                      file_name=self.store.get_selected_features_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)))
+
+        self.store.save_model(data=self.selected_features,
+                              file_name=self.store.get_selected_features_name(self.config.batch_code, self.stock_code, str(self.config.model_idx)), file_type="json")
 
         return self
 
