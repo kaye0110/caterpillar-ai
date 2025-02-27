@@ -123,48 +123,21 @@ class OverseeService:
         config.num_layers = 1
         config.dropout = 0.1
         config.learning_rate = 0.0001
+        config.model_idx = 9999
 
-        file_name = f"performance_tuning_result_{self.batch_code}_{ts_code}"
-        top_params = self.datastore.load_model_data(file_name=file_name)
 
-        if top_params is None or len(top_params) <= 0:
-            processor = None
-            if "XLSTM" == self.model_type:
-                processor = XLSTMProcess(config)
-            elif "hybrid" == self.model_type:
-                processor = HybridModelProcess(config)
+        processor = None
+        if "XLSTM" == self.model_type:
+            processor = XLSTMProcess(config)
+        elif "hybrid" == self.model_type:
+            processor = HybridModelProcess(config)
 
-            if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
-                processor.stock_code = ts_code
+        if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
+            processor.stock_code = ts_code
 
-            processor.prepare(data=filtered_df).build_model().train().test().report()
+        processor.prepare(data=filtered_df).build_model().train().test().report()
 
-        else:
-            # 遍历 top 10 记录
-            for idx, record in top_params.iterrows():
-                self.logger.info(f"Record {idx + 1}, composite_score: {record['composite_score']}  mse: {record['mse']}  mae: {record['mae']}  rmse: {record['rmse']}  mape: {record['mape']}  smape: {record['smape']}  explained_variance: {record['explained_variance']}  adj_r2: {record['adj_r2']}   ")
-                self.logger.info(f"Record {idx + 1}, batch_size: {record['batch_size']} hidden_size: {record['hidden_size']} num_layers: {record['num_layers']} dropout: {record['dropout']} learning_rate: {record['learning_rate']} max_depth: {record['max_depth']} n_estimators: {record['n_estimators']}  ")
 
-                config.batch_size = int(record['batch_size'])
-                config.hidden_size = int(record['hidden_size'])
-                config.num_layers = int(record['num_layers'])
-                config.dropout = record['dropout']
-                config.learning_rate = record['learning_rate']
-                config.max_depth = int(record['max_depth'])
-                config.n_estimators = int(record['n_estimators'])
-                config.model_idx = idx + 1
-                config.model_composite_score = record['composite_score']
-
-                processor = None
-                if "XLSTM" == self.model_type:
-                    processor = XLSTMProcess(config)
-                elif "hybrid" == self.model_type:
-                    processor = HybridModelProcess(config)
-
-                if ts_code is not None and ts_code != "" and ts_code in df['ts_code'].values:
-                    processor.stock_code = ts_code
-
-                processor.prepare(data=filtered_df).build_model().train().test().report()
 
     @time_counter(logger_name=__name__)
     def _performance_tuning(self, df: pd.DataFrame, ts_code: str = 'all') -> {}:
@@ -226,6 +199,7 @@ class OverseeService:
                 config.learning_rate = params[4]
                 config.max_depth = params[5]
                 config.n_estimators = params[6]
+                config.model_idx = idx + 1
 
                 processor = None
                 if "XLSTM" == self.model_type:
@@ -258,6 +232,7 @@ class OverseeService:
                     'learning_rate': config.learning_rate,
                     'max_depth': config.max_depth,
                     'n_estimators': config.n_estimators,
+                    'model_idx': config.model_idx,
                     'mse': mse,
                     'mae': mae,
                     'rmse': rmse,
@@ -306,13 +281,16 @@ class OverseeService:
         top_params = self.datastore.load_model_data(file_name=file_name)
 
         if top_params is None or len(top_params) <= 0:
-            processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx="0")
+            processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx="9999")
             df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
             return self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.polt_end_date)
 
         else:
             for idx, record in top_params.iterrows():
-                processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx=str(idx + 1))
+                self.logger.info(f"Record {record['model_idx']}, composite_score: {record['composite_score']}  mse: {record['mse']}  mae: {record['mae']}  rmse: {record['rmse']}  mape: {record['mape']}  smape: {record['smape']}  explained_variance: {record['explained_variance']}  adj_r2: {record['adj_r2']}   ")
+                self.logger.info(f"Record {record['model_idx']}, batch_size: {record['batch_size']} hidden_size: {record['hidden_size']} num_layers: {record['num_layers']} dropout: {record['dropout']} learning_rate: {record['learning_rate']} max_depth: {record['max_depth']} n_estimators: {record['n_estimators']}  ")
+
+                processor = ProcessorBuilder.build_by_batch_code(batch_code=self.batch_code, stock_code=ts_code, model_idx=str(record['model_idx']))
                 df_last = filtered_df.tail(processor.config.n_timestep + processor.config.n_predict + 30)
                 self.predict_with_export(df=df_last, processor=processor, ts_code=ts_code, start_date=self.predict_start_date, end_date=self.predict_end_date, plotly_end_date=self.polt_end_date)
 

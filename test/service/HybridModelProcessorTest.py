@@ -10,8 +10,8 @@ class OverseeServiceTest:
     logger = logging.getLogger(__name__)
     app_config = AppConfig()
     model_type = "hybrid"
-    batch_code = "20250222_001"
-    stock_code_array = ["688981.SH"]  # stock_code_tech_50_etf
+    batch_code = "20250226_001"
+    stock_code_array = stock_code_tech_50_etf
     start_date = '2020101'
     end_date = '20250225'
     train_start_date = '2020-01-01'
@@ -48,7 +48,7 @@ class OverseeServiceTest:
         oversee.polt_end_date = self.poltly_end_date
 
         oversee.performance_tuning_single()
-        oversee.train_and_test_single()
+        # oversee.train_and_test_single()
 
     def test_predict(self):
         oversee = OverseeService(self.batch_code)
